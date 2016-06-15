@@ -23,6 +23,15 @@ class LearningAgent(Agent):
         deadline = self.env.get_deadline(self)
 
         # TODO: Update state
+        # STEP_TWO: Status definition, tuple of useful inputs
+        # Is deadline input necessary?
+        self.state = (
+            ('next', self.next_waypoint),
+            ('light', inputs['light']),
+            ('oncoming', inputs['oncoming']),
+            ('left', inputs['left']),
+            ('right', inputs['right']),
+            ('deadline', deadline))
 
         # TODO: Select action according to your policy
         # STEP_ONE: Random action
