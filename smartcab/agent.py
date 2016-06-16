@@ -1,8 +1,13 @@
 import random
 import operator
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from environment import Agent, Environment
 from planner import RoutePlanner
 from simulator import Simulator
+
+N_TRIALS = 100
 
 class LearningAgent(Agent):
     """An agent that learns to drive in the smartcab world."""
@@ -11,31 +16,62 @@ class LearningAgent(Agent):
         super(LearningAgent, self).__init__(env)  # sets self.env = env, state = None, next_waypoint = None, and a default color
         self.color = 'red'  # override color
         self.planner = RoutePlanner(self.env, self)  # simple route planner to get next_waypoint
+        self.trial = 0 # [0,99]
+        self.unlocked = False
+        self.trial_end = False
         # TODO: Initialize any additional variables here
         # Valid actions
         self.actions = [None, 'forward', 'left', 'right']
 
         # Q-Learning
         # Alpha (learning rate)
-        self.alpha = 0.5
+        self.alpha = 0.5 # should decay with t too?
         # Gamma (discount factor)
-        self.gamma = 0.5
-        self.epsilon = 0.5
+        self.gamma = 0.5 # 0.33 why? dunno
+        self.epsilon = 0.33 # equal chance 0.5, progressive decay with t value
         self.Q = {}
         self.Q_default_value = 0.0
 
         # Report
         self.total_reward = []
         self.trial_reward = 0
+        self.success = 0
 
     def reset(self, destination=None):
         self.planner.route_to(destination)
         # TODO: Prepare for a new trip; reset any variables here, if required
+
+        if self.unlocked:
+            self.trial += 1
+            self.decay_factor = ((N_TRIALS+1)-self.trial)/N_TRIALS
+
+            self.alpha = self.alpha * self.decay_factor
+            self.gamma = self.gamma * self.decay_factor
+            self.epsilon = self.epsilon * self.decay_factor
+
+            self.trial_end = False
+            self.trial_reward = 0;
+        else:
+            # Locked for first trial
+            self.unlocked = True
+
+    def end(self):
+        self.total_reward.append(self.trial_reward)
         print "Trial Finished: Total Reward {}".format(self.trial_reward)
+
+        if self.trial == N_TRIALS - 1:
+            print "------------------------------------------------------------------"  # [debug]
+            print "CONCLUSION"
+            print "Success Rate {}".format(float(self.success)/float(N_TRIALS))
+            y = np.array(self.total_reward)
+            plt.title('Trial Reward per iteration')
+            plt.xlabel('Trial')
+            plt.ylabel('Reward')
+            plt.plot(y)
+            plt.show()
+
         print "------------------------------------------------------------------"  # [debug]
 
-        self.total_reward.append(self.trial_reward)
-        self.trial_reward = 0;
 
     def update(self, t):
         # Gather inputs
@@ -48,11 +84,11 @@ class LearningAgent(Agent):
         # Is deadline input necessary?
         self.state = (
             ('next', self.next_waypoint),
-            ('light', inputs['light']))
-            # ('oncoming', inputs['oncoming']),
-            # ('left', inputs['left']),
-            # ('right', inputs['right']))
-            # ('deadline', deadline))
+            ('light', inputs['light']),
+            ('oncoming', inputs['oncoming']),
+            ('left', inputs['left']),
+            ('right', inputs['right']),
+            ('deadline', deadline))
 
         state = self.state
         #print "LearningAgent.update(): state = {}".format(state)  # [debug]
@@ -68,12 +104,6 @@ class LearningAgent(Agent):
             if best_action:
                 action = best_action
 
-        #print "Action = {}".format(action)
-
-
-        #print "LearningAgent.update(): action = {}".format(action)  # [debug]
-
-
         # Execute action and get reward
         reward = self.env.act(self, action)
         self.trial_reward += reward
@@ -85,15 +115,23 @@ class LearningAgent(Agent):
 
         state_prime = (
             ('next', self.next_waypoint),
-            ('light', inputs['light']))
-            # ('oncoming', inputs['oncoming']),
-            # ('left', inputs['left']),
-            # ('right', inputs['right']))
-            # ('deadline', deadline))
-        #print "LearningAgent.update(): state_prime = {}".format(state_prime)  # [debug]
+            ('light', inputs['light']),
+            ('oncoming', inputs['oncoming']),
+            ('left', inputs['left']),
+            ('right', inputs['right']),
+            ('deadline', deadline))
 
         self.update_Q(state, action, reward, state_prime)
-        #print self.Q
+
+        # Reporting
+        if deadline == 0:
+            self.trial_end = True
+        if reward > 2.0:
+            self.success += 1
+            self.trial_end = True
+
+        if self.trial_end:
+            self.end()
 
         #print "LearningAgent.update(): deadline = {}, inputs = {}, action = {}, reward = {}".format(deadline, inputs, action, reward)  # [debug]
         #print "------------------------------------------------------------------"  # [debug]
@@ -158,8 +196,7 @@ class LearningAgent(Agent):
                 self.Q[(state, action)] = self.Q_default_value
 
         self.Q[(state, action)] = (1 - self.alpha) * self.Q[(state, action)] + \
-            self.alpha * (reward + self.gamma * \
-                self.max_Q_by_state(state_prime))
+            self.alpha * (reward + self.gamma * self.max_Q_by_state(state_prime))
 
 
 def run():
@@ -173,10 +210,10 @@ def run():
     # TODO: Change later enforce_deadline=True
 
     # Now simulate it
-    sim = Simulator(e, update_delay=0.25, display=False)  # create simulator (uses pygame when display=True, if available)
+    sim = Simulator(e, update_delay=0.001, display=False)  # create simulator (uses pygame when display=True, if available)
     # NOTE: To speed up simulation, reduce update_delay and/or set display=False
 
-    sim.run(n_trials=100)  # run for a specified number of trials
+    sim.run(n_trials=N_TRIALS)  # run for a specified number of trials
     # NOTE: To quit midway, press Esc or close pygame window, or hit Ctrl+C on the command-line
 
 
