@@ -1,4 +1,5 @@
 import random
+import operator
 from environment import Agent, Environment
 from planner import RoutePlanner
 from simulator import Simulator
@@ -19,13 +20,22 @@ class LearningAgent(Agent):
         self.alpha = 0.5
         # Gamma (discount factor)
         self.gamma = 0.5
-        self.epsilon = 0
+        self.epsilon = 0.5
         self.Q = {}
-        self.Q_default_value = 0
+        self.Q_default_value = 0.0
+
+        # Report
+        self.total_reward = []
+        self.trial_reward = 0
 
     def reset(self, destination=None):
         self.planner.route_to(destination)
         # TODO: Prepare for a new trip; reset any variables here, if required
+        print "Trial Finished: Total Reward {}".format(self.trial_reward)
+        print "------------------------------------------------------------------"  # [debug]
+
+        self.total_reward.append(self.trial_reward)
+        self.trial_reward = 0;
 
     def update(self, t):
         # Gather inputs
@@ -45,19 +55,28 @@ class LearningAgent(Agent):
             # ('deadline', deadline))
 
         state = self.state
-        print "LearningAgent.update(): state_zero = {}".format(state)  # [debug]
+        #print "LearningAgent.update(): state = {}".format(state)  # [debug]
 
         # TODO: Select action according to your policy
         # STEP_ONE: Random action
         # Exploring -> random
         # Best choice -> agent experience Q matrix
-        action = random.choice(actions)
+        action = random.choice(self.actions)
+        if random.random() > self.epsilon:
+            best_action = self.best_Q_action(state)
+            #print "Best Action = {}".format(best_action)
+            if best_action:
+                action = best_action
 
-        print "LearningAgent.update(): action = {}".format(action)  # [debug]
+        #print "Action = {}".format(action)
+
+
+        #print "LearningAgent.update(): action = {}".format(action)  # [debug]
 
 
         # Execute action and get reward
         reward = self.env.act(self, action)
+        self.trial_reward += reward
 
         # TODO: Learn policy based on state, action, reward
         self.next_waypoint = self.planner.next_waypoint()  # from route planner, also displayed by simulator
@@ -71,19 +90,49 @@ class LearningAgent(Agent):
             # ('left', inputs['left']),
             # ('right', inputs['right']))
             # ('deadline', deadline))
-        print "LearningAgent.update(): state_one = {}".format(state_prime)  # [debug]
+        #print "LearningAgent.update(): state_prime = {}".format(state_prime)  # [debug]
 
         self.update_Q(state, action, reward, state_prime)
+        #print self.Q
 
-        print "------------------------------------------------------------------"  # [debug]
         #print "LearningAgent.update(): deadline = {}, inputs = {}, action = {}, reward = {}".format(deadline, inputs, action, reward)  # [debug]
+        #print "------------------------------------------------------------------"  # [debug]
 
-    def get_max_Q_for_state(self, state):
+
+    def best_Q_action(self, state):
+        """Select max Q action based on given state.
+
+        Args:
+            state(tuple)
+
+        Returns:
+            string: action [None, "forward", "left", "right"], False in other case
+        """
+        state_Q = {}
+
+        for action in self.actions:
+            if (state, action) not in self.Q:
+                return False
+            else:
+                state_Q[(state, action)] = self.Q[(state, action)]
+
+        return max(state_Q.iteritems(), key=operator.itemgetter(1))[0][1]
+
+
+    def max_Q_by_state(self, state):
+        """Best Q given a state
+
+        Args:
+            state(tuple)
+
+        Returns:
+            int: Q value if that state is stored, 0.0 in other case
+        """
         max_q = []
 
         for action in self.actions:
             if (state, action) not in self.Q:
-                return 0
+                return self.Q_default_value
             else:
                 max_q.append(self.Q[(state, action)])
 
@@ -91,7 +140,16 @@ class LearningAgent(Agent):
 
 
     def update_Q(self, state, action, reward, state_prime):
-        print "Updating Q MATRIX"
+        """Update the Q Matrix
+
+        Args:
+            state(tuple)
+            action(string)
+            reward(int)
+            state_prime(tuple)
+
+        """
+        # print "Updating Q MATRIX"
 
         # Q(s,a) = (1- alpha)*Q(s,a) + alpha*(reward + gamma * max_Q(s', a'))
 
@@ -101,7 +159,7 @@ class LearningAgent(Agent):
 
         self.Q[(state, action)] = (1 - self.alpha) * self.Q[(state, action)] + \
             self.alpha * (reward + self.gamma * \
-                self.get_max_Q_for_state(self.state_prime))
+                self.max_Q_by_state(state_prime))
 
 
 def run():
@@ -110,12 +168,12 @@ def run():
     # Set up environment and agent
     e = Environment()  # create environment (also adds some dummy traffic)
     a = e.create_agent(LearningAgent)  # create agent
-    e.set_primary_agent(a, enforce_deadline=False)  # specify agent to track
+    e.set_primary_agent(a, enforce_deadline=True)  # specify agent to track
     # NOTE: You can set enforce_deadline=False while debugging to allow longer trials
     # TODO: Change later enforce_deadline=True
 
     # Now simulate it
-    sim = Simulator(e, update_delay=2, display=True)  # create simulator (uses pygame when display=True, if available)
+    sim = Simulator(e, update_delay=0.25, display=False)  # create simulator (uses pygame when display=True, if available)
     # NOTE: To speed up simulation, reduce update_delay and/or set display=False
 
     sim.run(n_trials=100)  # run for a specified number of trials
