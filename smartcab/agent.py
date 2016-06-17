@@ -8,6 +8,10 @@ from planner import RoutePlanner
 from simulator import Simulator
 
 N_TRIALS = 100
+N_SIMULATIONS = 1
+
+def get_simulation_params():
+    return 0.5, 0.5, 0.33
 
 class LearningAgent(Agent):
     """An agent that learns to drive in the smartcab world."""
@@ -25,12 +29,12 @@ class LearningAgent(Agent):
 
         # Q-Learning
         # Alpha (learning rate)
-        self.alpha = 0.5 # should decay with t too?
+        self.alpha = get_simulation_params()[0] # should decay with t too?
         # Gamma (discount factor)
-        self.gamma = 0.5 # 0.33 why? dunno
-        self.epsilon = 0.33 # equal chance 0.5, progressive decay with t value
+        self.gamma = get_simulation_params()[1] # 0.33 why? dunno
+        self.epsilon = get_simulation_params()[2] # equal chance 0.5, progressive decay with t value
         self.Q = {}
-        self.Q_default_value = 0.0
+        self.Q_default_value = 0.0 #not learning yet
 
         # Report
         self.total_reward = []
@@ -62,13 +66,32 @@ class LearningAgent(Agent):
         if self.trial == N_TRIALS - 1:
             print "------------------------------------------------------------------"  # [debug]
             print "CONCLUSION"
-            print "Success Rate {}".format(float(self.success)/float(N_TRIALS))
+            success_rate = (float(self.success)/float(N_TRIALS))
+            print "Success Rate {}".format(success_rate)
             y = np.array(self.total_reward)
-            plt.title('Trial Reward per iteration')
-            plt.xlabel('Trial')
-            plt.ylabel('Reward')
+            mean = y.mean()
+            std = y.std()
+            print "Reward distribution Mean {}".format(mean)
+            print "Reward distribution Std Deviation {}".format(std)
+
+            plt.figure(1)
+
+            plt.subplot(211)
             plt.plot(y)
+            plt.title('Reward/Iteration')
+            plt.xlabel('Trial')
+            plt.ylabel('Reward Value')
+            plt.text(0, 0, r'Success Rate %s'%(success_rate))
+
+
+            plt.subplot(212)
+            plt.hist(y)
+            plt.title('Reward Distribution')
+            plt.xlabel('Reward Value')
+            plt.ylabel('# trials')
+            plt.text(0, 0, r'$\mu=%s,\ \sigma=%s$'%(mean,std))
             plt.show()
+
 
         print "------------------------------------------------------------------"  # [debug]
 
@@ -84,11 +107,11 @@ class LearningAgent(Agent):
         # Is deadline input necessary?
         self.state = (
             ('next', self.next_waypoint),
-            ('light', inputs['light']),
-            ('oncoming', inputs['oncoming']),
-            ('left', inputs['left']),
-            ('right', inputs['right']),
-            ('deadline', deadline))
+            ('light', inputs['light']))
+            #('oncoming', inputs['oncoming']),
+            #('left', inputs['left']),
+            #('right', inputs['right']),
+            #('deadline', deadline))
 
         state = self.state
         #print "LearningAgent.update(): state = {}".format(state)  # [debug]
@@ -115,11 +138,11 @@ class LearningAgent(Agent):
 
         state_prime = (
             ('next', self.next_waypoint),
-            ('light', inputs['light']),
-            ('oncoming', inputs['oncoming']),
-            ('left', inputs['left']),
-            ('right', inputs['right']),
-            ('deadline', deadline))
+            ('light', inputs['light']))
+            #('oncoming', inputs['oncoming']),
+            #('left', inputs['left']),
+            #('right', inputs['right']),
+            #('deadline', deadline))
 
         self.update_Q(state, action, reward, state_prime)
 
@@ -202,19 +225,21 @@ class LearningAgent(Agent):
 def run():
     """Run the agent for a finite number of trials."""
 
-    # Set up environment and agent
-    e = Environment()  # create environment (also adds some dummy traffic)
-    a = e.create_agent(LearningAgent)  # create agent
-    e.set_primary_agent(a, enforce_deadline=True)  # specify agent to track
-    # NOTE: You can set enforce_deadline=False while debugging to allow longer trials
-    # TODO: Change later enforce_deadline=True
+    for simulation in range(0,N_SIMULATIONS):
 
-    # Now simulate it
-    sim = Simulator(e, update_delay=0.001, display=False)  # create simulator (uses pygame when display=True, if available)
-    # NOTE: To speed up simulation, reduce update_delay and/or set display=False
+        # Set up environment and agent
+        e = Environment()  # create environment (also adds some dummy traffic)
+        a = e.create_agent(LearningAgent)  # create agent
+        e.set_primary_agent(a, enforce_deadline=True)  # specify agent to track
+        # NOTE: You can set enforce_deadline=False while debugging to allow longer trials
+        # TODO: Change later enforce_deadline=True
 
-    sim.run(n_trials=N_TRIALS)  # run for a specified number of trials
-    # NOTE: To quit midway, press Esc or close pygame window, or hit Ctrl+C on the command-line
+        # Now simulate it
+        sim = Simulator(e, update_delay=0.001, display=False)  # create simulator (uses pygame when display=True, if available)
+        # NOTE: To speed up simulation, reduce update_delay and/or set display=False
+
+        sim.run(n_trials=N_TRIALS)  # run for a specified number of trials
+        # NOTE: To quit midway, press Esc or close pygame window, or hit Ctrl+C on the command-line
 
 
 if __name__ == '__main__':
