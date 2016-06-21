@@ -9,9 +9,10 @@ from simulator import Simulator
 
 N_TRIALS = 100
 N_SIMULATIONS = 1
+simulation_rates = []
 
 def get_simulation_params():
-    return 0.5, 0.5, 0.33
+    return 0.5, 0.5, 1
 
 class LearningAgent(Agent):
     """An agent that learns to drive in the smartcab world."""
@@ -31,7 +32,7 @@ class LearningAgent(Agent):
         # Alpha (learning rate)
         self.alpha = get_simulation_params()[0] # should decay with t too?
         # Gamma (discount factor)
-        self.gamma = get_simulation_params()[1] # 0.33 why? dunno
+        self.gamma = get_simulation_params()[1] #
         self.epsilon = get_simulation_params()[2] # equal chance 0.5, progressive decay with t value
         self.Q = {}
         self.Q_default_value = 0.0 #not learning yet
@@ -50,7 +51,7 @@ class LearningAgent(Agent):
             self.decay_factor = ((N_TRIALS+1)-self.trial)/N_TRIALS
 
             self.alpha = self.alpha * self.decay_factor
-            self.gamma = self.gamma * self.decay_factor
+            self.gamma = self.gamma
             self.epsilon = self.epsilon * self.decay_factor
 
             self.trial_end = False
@@ -61,36 +62,43 @@ class LearningAgent(Agent):
 
     def end(self):
         self.total_reward.append(self.trial_reward)
-        print "Trial Finished: Total Reward {}".format(self.trial_reward)
 
-        if self.trial == N_TRIALS - 1:
-            print "------------------------------------------------------------------"  # [debug]
-            print "CONCLUSION"
-            success_rate = (float(self.success)/float(N_TRIALS))
-            print "Success Rate {}".format(success_rate)
-            y = np.array(self.total_reward)
-            mean = y.mean()
-            std = y.std()
-            print "Reward distribution Mean {}".format(mean)
-            print "Reward distribution Std Deviation {}".format(std)
+        if N_SIMULATIONS == 1: #Report each TRIAL info if N_SIMULATIONS == 1
+            print "Trial Finished: Total Reward {}".format(self.trial_reward)
 
-            plt.figure(1)
+            if self.trial == N_TRIALS - 1: #When simulation finishes
+                success_rate = (float(self.success)/float(N_TRIALS))
+                print "------------------------------------------------------------------"  # [debug]
+                print "CONCLUSION"
+                print "Success Rate {}".format(success_rate)
+                y = np.array(self.total_reward)
+                mean = y.mean()
+                std = y.std()
+                print "Reward distribution Mean {}".format(mean)
+                print "Reward distribution Std Deviation {}".format(std)
 
-            plt.subplot(211)
-            plt.plot(y)
-            plt.title('Reward/Iteration')
-            plt.xlabel('Trial')
-            plt.ylabel('Reward Value')
-            plt.text(0, 0, r'Success Rate %s'%(success_rate))
+                plt.figure(1)
+
+                plt.subplot(211)
+                plt.plot(y)
+                plt.title('Reward/Iteration')
+                plt.xlabel('Trial')
+                plt.ylabel('Reward Value')
+                plt.text(0, 0, r'Success Rate %s'%(success_rate))
 
 
-            plt.subplot(212)
-            plt.hist(y)
-            plt.title('Reward Distribution')
-            plt.xlabel('Reward Value')
-            plt.ylabel('# trials')
-            plt.text(0, 0, r'$\mu=%s,\ \sigma=%s$'%(mean,std))
-            plt.show()
+                plt.subplot(212)
+                plt.hist(y)
+                plt.title('Reward Distribution')
+                plt.xlabel('Reward Value')
+                plt.ylabel('# trials')
+                plt.text(0, 0, r'$\mu=%s,\ \sigma=%s$'%(mean,std))
+                plt.show()
+
+        else: #N_SIMULATIONS > 1
+            if self.trial == N_TRIALS - 1: #end of each simulation
+                success_rate = (float(self.success)/float(N_TRIALS))
+                simulation_rates.append(success_rate)
 
 
         print "------------------------------------------------------------------"  # [debug]
@@ -225,7 +233,7 @@ class LearningAgent(Agent):
 def run():
     """Run the agent for a finite number of trials."""
 
-    for simulation in range(0,N_SIMULATIONS):
+    for simulation in range(0, N_SIMULATIONS):
 
         # Set up environment and agent
         e = Environment()  # create environment (also adds some dummy traffic)
@@ -240,6 +248,17 @@ def run():
 
         sim.run(n_trials=N_TRIALS)  # run for a specified number of trials
         # NOTE: To quit midway, press Esc or close pygame window, or hit Ctrl+C on the command-line
+
+        if N_SIMULATIONS > 1 and simulation == N_SIMULATIONS - 1:
+            plt.figure(1)
+
+            plt.subplot(111)
+            plt.plot(simulation_rates)
+            plt.title('Success Rate/Simulation')
+            plt.xlabel('# Simulation')
+            plt.ylabel('Success Rate')
+
+            plt.show()
 
 
 if __name__ == '__main__':
