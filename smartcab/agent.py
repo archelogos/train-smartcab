@@ -1,5 +1,6 @@
 import random
 import operator
+import csv
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -8,11 +9,15 @@ from planner import RoutePlanner
 from simulator import Simulator
 
 N_TRIALS = 100
-N_SIMULATIONS = 1
+N_SIMULATIONS = 10
 simulation_rates = []
+last_errors = []
 
-def get_simulation_params():
-    return 0.5, 0.5, 1
+
+def get_simulation_params(i):
+    """Alpha, Gamma, Epsilon"""
+    params = [[0.5, 0.1, 0.1],[0.0, 0.0, 0.0]]
+    return params[i]
 
 class LearningAgent(Agent):
     """An agent that learns to drive in the smartcab world."""
@@ -30,17 +35,22 @@ class LearningAgent(Agent):
 
         # Q-Learning
         # Alpha (learning rate)
-        self.alpha = get_simulation_params()[0] # should decay with t too?
+        self.alpha = get_simulation_params(0)[0] # should decay with t too?
         # Gamma (discount factor)
-        self.gamma = get_simulation_params()[1] #
-        self.epsilon = get_simulation_params()[2] # equal chance 0.5, progressive decay with t value
+        self.gamma = get_simulation_params(0)[1] #
+        self.epsilon = get_simulation_params(0)[2] # equal chance 0.5, progressive decay with t value
+        self.decay_factor = 1.0
         self.Q = {}
         self.Q_default_value = 0.0 #not learning yet
 
         # Report
         self.total_reward = []
+        self.total_penalties = []
         self.trial_reward = 0
+        self.trial_penalty = 0
         self.success = 0
+        self.failure = 0
+        self.last_failure = 0
 
     def reset(self, destination=None):
         self.planner.route_to(destination)
@@ -48,7 +58,9 @@ class LearningAgent(Agent):
 
         if self.unlocked:
             self.trial += 1
-            self.decay_factor = ((N_TRIALS+1)-self.trial)/N_TRIALS
+            self.decay_factor = ((N_TRIALS+1)-self.trial)/float(N_TRIALS)
+
+            #print "{0:.2f}".format(self.decay_factor)
 
             self.alpha = self.alpha * self.decay_factor
             self.gamma = self.gamma
@@ -56,22 +68,33 @@ class LearningAgent(Agent):
 
             self.trial_end = False
             self.trial_reward = 0;
+            self.trial_penalty = 0;
         else:
             # Locked for first trial
             self.unlocked = True
 
     def end(self):
         self.total_reward.append(self.trial_reward)
+        self.total_penalties.append(self.trial_penalty)
 
         if N_SIMULATIONS == 1: #Report each TRIAL info if N_SIMULATIONS == 1
             print "Trial Finished: Total Reward {}".format(self.trial_reward)
 
             if self.trial == N_TRIALS - 1: #When simulation finishes
                 success_rate = (float(self.success)/float(N_TRIALS))
+                failure_rate = (float(self.failure)/float(N_TRIALS))
+
+                simulation_rates.append(success_rate)
+                last_errors.append(self.last_failure)
+
                 print "------------------------------------------------------------------"  # [debug]
                 print "CONCLUSION"
                 print "Success Rate {}".format(success_rate)
+                print "Failure Rate {}".format(failure_rate)
+                print "Last Failure {}".format(self.last_failure)
+
                 y = np.array(self.total_reward)
+                z = np.array(self.total_penalties)
                 mean = y.mean()
                 std = y.std()
                 print "Reward distribution Mean {}".format(mean)
@@ -79,26 +102,35 @@ class LearningAgent(Agent):
 
                 plt.figure(1)
 
-                plt.subplot(211)
+                plt.subplot(221)
                 plt.plot(y)
                 plt.title('Reward/Iteration')
                 plt.xlabel('Trial')
                 plt.ylabel('Reward Value')
                 plt.text(0, 0, r'Success Rate %s'%(success_rate))
 
-
-                plt.subplot(212)
+                plt.subplot(222)
                 plt.hist(y)
                 plt.title('Reward Distribution')
                 plt.xlabel('Reward Value')
                 plt.ylabel('# trials')
                 plt.text(0, 0, r'$\mu=%s,\ \sigma=%s$'%(mean,std))
+
+                plt.subplot(223)
+                plt.plot(z)
+                plt.title('Penalties/trial')
+                plt.xlabel('# trial')
+                plt.ylabel('Penalties')
+
                 plt.show()
 
         else: #N_SIMULATIONS > 1
             if self.trial == N_TRIALS - 1: #end of each simulation
                 success_rate = (float(self.success)/float(N_TRIALS))
+                failure_rate = (float(self.failure)/float(N_TRIALS))
+
                 simulation_rates.append(success_rate)
+                last_errors.append(self.last_failure)
 
 
         print "------------------------------------------------------------------"  # [debug]
@@ -155,11 +187,21 @@ class LearningAgent(Agent):
         self.update_Q(state, action, reward, state_prime)
 
         # Reporting
-        if deadline == 0:
+        if deadline == 0: # end of the trial
+            if reward > 2.0:
+                self.success += 1
+            else:
+                self.failure += 1
+                self.last_failure = self.trial
+
             self.trial_end = True
-        if reward > 2.0:
-            self.success += 1
-            self.trial_end = True
+        else:
+            if reward > 2.0: # reaches the destination
+                self.success += 1
+                self.trial_end = True
+
+            if reward < 0.0: #tracking a penalty
+                self.trial_penalty += 1
 
         if self.trial_end:
             self.end()
@@ -249,16 +291,38 @@ def run():
         sim.run(n_trials=N_TRIALS)  # run for a specified number of trials
         # NOTE: To quit midway, press Esc or close pygame window, or hit Ctrl+C on the command-line
 
-        if N_SIMULATIONS > 1 and simulation == N_SIMULATIONS - 1:
-            plt.figure(1)
+        if simulation == N_SIMULATIONS - 1:
 
-            plt.subplot(111)
-            plt.plot(simulation_rates)
-            plt.title('Success Rate/Simulation')
-            plt.xlabel('# Simulation')
-            plt.ylabel('Success Rate')
+            with open('results.csv', 'a') as csvfile:
+                fieldnames = ['alpha', 'gamma', 'epsilon', 'success_rate', 'last_failure']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-            plt.show()
+                for index in range(0,len(simulation_rates)):
+                    writer.writerow({
+                        'alpha': get_simulation_params(0)[0],
+                        'gamma': get_simulation_params(0)[1],
+                        'epsilon': get_simulation_params(0)[2],
+                        'success_rate': simulation_rates[index],
+                        'last_failure': last_errors[index]})
+
+
+            if N_SIMULATIONS > 1: #multiple simulation AND last simulation
+
+                plt.figure(1)
+
+                plt.subplot(211)
+                plt.plot(simulation_rates)
+                plt.title('Success Rate/Simulation')
+                plt.xlabel('# Simulation')
+                plt.ylabel('Success Rate')
+
+                plt.subplot(212)
+                plt.plot(last_errors)
+                plt.title('Last failed trial per simulation')
+                plt.xlabel('# Simulation')
+                plt.ylabel('Last failed trial')
+
+                plt.show()
 
 
 if __name__ == '__main__':
