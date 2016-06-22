@@ -9,7 +9,7 @@ from planner import RoutePlanner
 from simulator import Simulator
 
 N_TRIALS = 100
-N_SIMULATIONS = 10
+N_SIMULATIONS = 1
 simulation_rates = []
 last_errors = []
 
