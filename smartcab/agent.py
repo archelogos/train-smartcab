@@ -16,7 +16,7 @@ last_errors = []
 
 def get_simulation_params(i):
     """Alpha, Gamma, Epsilon"""
-    params = [[0.5, 0.1, 0.1],[0.0, 0.0, 0.0]]
+    params = [[0.9, 0.1, 0.1],[0.0, 0.0, 0.0]]
     return params[i]
 
 class LearningAgent(Agent):
@@ -62,7 +62,7 @@ class LearningAgent(Agent):
 
             #print "{0:.2f}".format(self.decay_factor)
 
-            self.alpha = self.alpha * self.decay_factor
+            self.alpha = self.alpha #* self.decay_factor
             self.gamma = self.gamma
             self.epsilon = self.epsilon * self.decay_factor
 
